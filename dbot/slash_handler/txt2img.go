@@ -13,12 +13,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/SpenserCai/sd-webui-discord/cluster"
 	"github.com/SpenserCai/sd-webui-discord/global"
 	"github.com/SpenserCai/sd-webui-discord/utils"
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/muesli/termenv"
 
 	"github.com/SpenserCai/sd-webui-go/intersvc"
 	"github.com/bwmarrin/discordgo"
@@ -310,7 +314,7 @@ func (shdl SlashHandler) BuildTxt2imgComponent(i *discordgo.InteractionCreate, i
 					CustomID: "txt2img|retry",
 					Label:    "Retry",
 					Style:    discordgo.SecondaryButton,
-					Emoji:    discordgo.ComponentEmoji{Name: "🔄"},
+					Emoji:    &discordgo.ComponentEmoji{Name: "🔄"},
 					Disabled: func() bool {
 						return !global.Config.UserCenter.Enable
 					}(),
@@ -319,7 +323,7 @@ func (shdl SlashHandler) BuildTxt2imgComponent(i *discordgo.InteractionCreate, i
 					CustomID: "txt2img|delete|" + shdl.GetDiscordUserId(i),
 					Label:    "Delete",
 					Style:    discordgo.SecondaryButton,
-					Emoji:    discordgo.ComponentEmoji{Name: "🗑️"},
+					Emoji:    &discordgo.ComponentEmoji{Name: "🗑️"},
 				},
 			},
 		},
@@ -333,7 +337,7 @@ func (shdl SlashHandler) BuildTxt2imgComponent(i *discordgo.InteractionCreate, i
 				CustomID: fmt.Sprintf("txt2img|multi_image|%d", j),
 				Label:    fmt.Sprintf("%d", j+1),
 				Style:    discordgo.SecondaryButton,
-				Emoji:    discordgo.ComponentEmoji{Name: "🖼️"},
+				Emoji:    &discordgo.ComponentEmoji{Name: "🖼️"},
 				Disabled: func() bool {
 					return !global.Config.UserCenter.Enable
 				}(),
@@ -346,9 +350,115 @@ func (shdl SlashHandler) BuildTxt2imgComponent(i *discordgo.InteractionCreate, i
 	return &components
 }
 
+func UpdateProgress(
+	node *cluster.ClusterNode,
+	s *discordgo.Session,
+	i *discordgo.InteractionCreate,
+	opt *intersvc.SdapiV1Txt2imgRequest,
+	generationDone chan bool,
+	progressDone chan bool,
+) {
+	progressBar := progress.New(
+		progress.WithColorProfile(termenv.ANSI256),
+		//progress.WithSolidFill("34"), //blue
+		//progress.WithScaledGradient("#FF7CCB", "#FDFF8C"), //discord doesn't support full ANSI256 colors
+	)
+
+loop:
+	for {
+		select {
+		case <-generationDone:
+			break loop
+		case <-time.After(1 * time.Second):
+			content := strings.Builder{}
+			if i.User != nil {
+				content.WriteString(fmt.Sprintf("<@%s> ", i.User.ID))
+			} else {
+				content.WriteString(fmt.Sprintf("<@%s> ", i.Member.User.ID))
+			}
+
+			content.WriteString("Generating image...\n\n")
+			//content.WriteString("### Status\n")
+
+			apiProgress := intersvc.SdapiV1Progress{}
+			apiProgress.Action(node.StableClient)
+
+			if apiProgress.Error != nil {
+				log.Printf("Error fetching progress: %s", apiProgress.Error)
+				break loop
+			} else if *apiProgress.ResponseItem.Progress == 0.0 {
+				continue
+			} else if *apiProgress.ResponseItem.Progress >= 1.0 {
+				break loop
+			}
+
+			memoryInfo := intersvc.SdapiV1Memory{}
+			memoryInfo.Action(node.StableClient)
+
+			if memoryInfo.Error != nil {
+				log.Printf("Error fetching memory status: %s", apiProgress.Error)
+			} else {
+				ramInfo := memoryInfo.ResponseItem.RAM.(map[string]interface{})
+				systemCudaInfo := memoryInfo.ResponseItem.Cuda.(map[string]interface{})["system"].(map[string]interface{})
+
+				content.WriteString(fmt.Sprintf(
+					"**RAM:** `%.1f GiB`/`%.1f GiB`\n",
+					ramInfo["used"].(float64)/math.Pow(2, 30),
+					ramInfo["total"].(float64)/math.Pow(2, 30),
+				))
+				content.WriteString(fmt.Sprintf(
+					"**VRAM:** `%.1f GiB`/`%.1f GiB`\n",
+					systemCudaInfo["used"].(float64)/math.Pow(2, 30),
+					systemCudaInfo["total"].(float64)/math.Pow(2, 30),
+				))
+			}
+
+			progressStr := progressBar.ViewAs(*apiProgress.ResponseItem.Progress)
+			//log.Print(progressStr)
+
+			state := apiProgress.ResponseItem.State.(map[string]interface{})
+
+			var currentStepStr = "??"
+			if currentStep, ok := state["sampling_step"]; ok {
+				currentStepStr = fmt.Sprintf("%d", int(currentStep.(float64)))
+			}
+
+			var totalStepsStr = "??"
+			if totalSteps, ok := state["sampling_steps"]; ok {
+				totalStepsStr = fmt.Sprintf("%d", int(totalSteps.(float64)))
+			} else if opt.Steps != nil {
+				totalStepsStr = fmt.Sprintf("%d", *opt.Steps)
+			}
+
+			content.WriteString(fmt.Sprintf(
+				"```ansi\n%v | ETA: %.1fs | step %v/%v\n```\n",
+				progressStr,
+				*apiProgress.ResponseItem.EtaRelative,
+				currentStepStr,
+				totalStepsStr,
+			))
+
+			messageContent := content.String()
+			s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: &messageContent,
+			})
+		}
+	}
+
+	progressDone <- true
+}
+
 func (shdl SlashHandler) Txt2imgAction(s *discordgo.Session, i *discordgo.InteractionCreate, opt *intersvc.SdapiV1Txt2imgRequest, node *cluster.ClusterNode) {
+	generationDone := make(chan bool)
+	progressDone := make(chan bool)
+	go UpdateProgress(node, s, i, opt, generationDone, progressDone)
+
 	txt2img := &intersvc.SdapiV1Txt2img{RequestItem: opt}
 	txt2img.Action(node.StableClient)
+
+	generationDone <- true
+	<-progressDone
+
 	if txt2img.Error != nil {
 		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Content: func() *string { v := txt2img.Error.Error(); return &v }(),
@@ -364,11 +474,16 @@ func (shdl SlashHandler) Txt2imgAction(s *discordgo.Session, i *discordgo.Intera
 			return
 		}
 
-		context := ""
+		context := strings.Builder{}
+		if i.User != nil {
+			context.WriteString(fmt.Sprintf("<@%s>", i.User.ID))
+		} else {
+			context.WriteString(fmt.Sprintf("<@%s>", i.Member.User.ID))
+		}
 		if !global.Config.DisableReturnGenInfo {
 			// 如果outinfo长度大于2000则context为：Success！，并创建info.json文件
 			if len(*outinfo) > 1800 {
-				context = "Success!"
+				context.WriteString(" Success!")
 				infoJson, _ := utils.GetJsonReaderByJsonString(*outinfo)
 				files = append(files, &discordgo.File{
 					Name:        "info.json",
@@ -378,9 +493,11 @@ func (shdl SlashHandler) Txt2imgAction(s *discordgo.Session, i *discordgo.Intera
 			} else {
 				var fOutput bytes.Buffer
 				json.Indent(&fOutput, []byte(*outinfo), "", "  ")
-				context = fmt.Sprintf("```json\n%v```\n", fOutput.String())
+				context.WriteString(fmt.Sprintf("\n```json\n%v```\n", fOutput.String()))
 			}
 		}
+		msgContent := context.String()
+
 		seed := fmt.Sprintf("%.0f", data["seed"])
 
 		if len(txt2img.GetResponse().Images) > 1 {
@@ -482,7 +599,7 @@ func (shdl SlashHandler) Txt2imgAction(s *discordgo.Session, i *discordgo.Intera
 			files = append(files, mergeAdditionalFile)
 		}
 		msg, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content:    &context,
+			Content:    &msgContent,
 			Embeds:     &allEmbeds,
 			Files:      files,
 			Components: shdl.BuildTxt2imgComponent(i, *opt.NIter),
