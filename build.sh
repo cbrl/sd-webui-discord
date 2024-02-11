@@ -57,6 +57,8 @@ if [ $GEN_API -ne 0 ]; then
     $GOPATH/bin/swagger generate server -f $API_SWAGGER_PATH --regenerate-configureapi -t $API_PATH/gen/
 fi
 
+cd $SCRIPT_DIR
+go mod tidy
 go build -o "$OUTPUT_DIR/sd-webui-discord"
 
 # 判断是否存在config.json
