@@ -32,6 +32,7 @@
         "enable_credit":false
     },
     "website":{
+		"location": "./website",
         "api":{
             "host":"127.0.0.1",
             "port":18890,

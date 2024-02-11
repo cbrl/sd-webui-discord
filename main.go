@@ -10,6 +10,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -29,21 +30,38 @@ import (
 )
 
 func LoadConfig() error {
-	exePath, err := os.Executable()
-	if err != nil {
-		return err
+	var configPath = ""
+
+	// Try to get by command line argument
+	flag.StringVar(&configPath, "config", "", "The configuration file")
+	flag.Parse()
+
+	if configPath == "" {
+		configPath = os.Getenv("SD_BOT_CONFIG")
 	}
-	exeDir := filepath.Dir(exePath)
-	configPath := filepath.Join(exeDir, "config.json")
+
+	if configPath == "" {
+		exePath, err := os.Executable()
+		if err != nil {
+			return err
+		}
+
+		exeDir := filepath.Dir(exePath)
+		configPath = filepath.Join(exeDir, "config.json")
+	}
+
 	file, err := os.Open(configPath)
 	if err != nil {
 		return err
 	}
+
 	defer file.Close()
+
 	err = json.NewDecoder(file).Decode(&global.Config)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -83,15 +101,9 @@ func PrintEvent() {
 }
 
 func RunWebSite() error {
-	exePath, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	exeDir := filepath.Dir(exePath)
-	websiteDir := filepath.Join(exeDir, "website")
-	fs := http.FileServer(http.Dir(websiteDir))
+	fs := http.FileServer(http.Dir(global.Config.WebSite.Location))
 	http.Handle("/", fs)
-	log.Println("website dir:", websiteDir)
+	log.Println("website dir:", global.Config.WebSite.Location)
 	apiURL, err := url.Parse(fmt.Sprintf("http://%s:%d", global.Config.WebSite.Api.Host, global.Config.WebSite.Api.Port))
 	if err != nil {
 		return err

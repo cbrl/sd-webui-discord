@@ -41,7 +41,8 @@ type UserCenter struct {
 }
 
 type WebSite struct {
-	Api struct {
+	Location string `json:"location"`
+	Api      struct {
 		Host            string `json:"host"`
 		Port            int    `json:"port"`
 		JwtSecret       string `json:"jwt_secret"`
