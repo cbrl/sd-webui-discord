@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 ###
  # @Author: SpenserCai
  # @Date: 2023-08-17 11:04:55
@@ -7,7 +9,38 @@
  # @Description: file content
 ### 
 # Web接口代码生存
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+CALL_DIR=$(pwd)
+
+GEN_API=0
+OUTPUT_DIR="$SCRIPT_DIR/release"
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --api)
+      GEN_API=1
+      shift # past argument
+      ;;
+    -o|--output-dir)
+      OUTPUT_DIR="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1") # save positional arg
+      shift # past argument
+      ;;
+  esac
+done
+
 GOPATH=$(go env GOPATH)
+
 # 判断是否安装go-swagger，如果没有则安装（在GOPATH/bin目录下）
 if [ ! -f "$GOPATH/bin/swagger" ]; then
     echo "go-swagger not found, install go-swagger"
@@ -15,53 +48,39 @@ if [ ! -f "$GOPATH/bin/swagger" ]; then
     go install github.com/go-swagger/go-swagger/cmd/swagger
 fi
 
-API_PATH="./api"
-API_SWAGGER_PATH="./api/swagger.yml"
+API_PATH="$SCRIPT_DIR/api"
+API_SWAGGER_PATH="$SCRIPT_DIR/api/swagger.yml"
 
 # 判断是否传入--gen-api参数，如果传入则重新生成api代码
-if [ "$1" = "--gen-api" ]; then
+if [ $GEN_API -ne 0 ]; then
     echo "generate api code"
     rm -rf $API_PATH/gen
-    mkdir $API_PATH/gen
+    mkdir -p $API_PATH/gen
     $GOPATH/bin/swagger generate server -f $API_SWAGGER_PATH --regenerate-configureapi -t $API_PATH/gen/
 fi
 
+go build -o "$OUTPUT_DIR/sd-webui-discord"
 
-export GOOS=linux
-go build -o "./release/sd-webui-discord"
-
-# 判断是否安装了gcc-mingw-w64，如果没有则安装
-if [ ! -f "/usr/bin/x86_64-w64-mingw32-gcc" ]; then
-    echo "gcc-mingw-w64 not found, install gcc-mingw-w64"
-    sudo apt install gcc-mingw-w64
-fi
-
-export CC=x86_64-w64-mingw32-gcc
-export CXX=x86_64-w64-mingw32-g++
-export GOOS=windows
-export GOARCH=amd64 
-export CGO_ENABLED=1
-go build -o "./release/sd-webui-discord.exe"
 # 判断是否存在config.json
-if [ ! -f "./release/config.json" ]; then
+if [ ! -f "$OUTPUT_DIR/config.json" ]; then
     echo "config.json not found, copy config.example.json to config.json"
-    cp ./config.example.json ./release/config.json
+    cp $SCRIPT_DIR/config.example.json $OUTPUT_DIR/config.json
 fi
 
 # 吧location目录和其中的文件复制到release目录，如果存在location目录则删除后再复制
-if [ -d "./release/location" ]; then
-    rm -rf ./release/location
+if [ -d "$OUTPUT_DIR/location" ]; then
+    rm -rf $OUTPUT_DIR/location
 fi
 
 # 切换到website目录，安装依赖并打包
-cd ./website
+cd $SCRIPT_DIR/website
 npm install
 npm run build
-cd ..
+cd $CALL_DIR
 
-if [ -d "./release/website" ]; then
-    rm -rf ./release/website
+if [ -d "$OUTPUT_DIR/website" ]; then
+    rm -rf $OUTPUT_DIR/website
 fi
 
-cp -r ./location ./release/location
-cp -r ./website/dist ./release/website
+cp -r $SCRIPT_DIR/location $OUTPUT_DIR/location
+cp -r $SCRIPT_DIR/website/dist $OUTPUT_DIR/website
