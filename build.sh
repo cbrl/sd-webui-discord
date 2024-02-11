@@ -40,13 +40,10 @@ done
 OUTPUT_DIR=$(realpath $OUTPUT_DIR)
 mkdir -p $OUTPUT_DIR
 
-cd $SCRIPT_DIR
-
 # 判断是否安装go-swagger，如果没有则安装（在GOPATH/bin目录下）
 if [ ! -f "$GOPATH/bin/swagger" ]; then
     echo "go-swagger not found, install go-swagger"
-    go get -u github.com/go-swagger/go-swagger
-    go install github.com/go-swagger/go-swagger/cmd/swagger
+    go install github.com/go-swagger/go-swagger/cmd/swagger@latest
 fi
 
 # 判断是否传入--gen-api参数，如果传入则重新生成api代码
