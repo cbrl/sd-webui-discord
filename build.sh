@@ -12,6 +12,7 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 CALL_DIR=$(pwd)
+GOPATH=$(go env GOPATH)
 
 GEN_API=0
 OUTPUT_DIR="$SCRIPT_DIR/release"
@@ -28,18 +29,18 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       shift # past value
       ;;
-    -*|--*)
+    *)
       echo "Unknown option $1"
       exit 1
-      ;;
-    *)
-      POSITIONAL_ARGS+=("$1") # save positional arg
-      shift # past argument
       ;;
   esac
 done
 
-GOPATH=$(go env GOPATH)
+# Ensure output path is absolute and exists
+OUTPUT_DIR=$(realpath $OUTPUT_DIR)
+mkdir -p $OUTPUT_DIR
+
+cd $SCRIPT_DIR
 
 # 判断是否安装go-swagger，如果没有则安装（在GOPATH/bin目录下）
 if [ ! -f "$GOPATH/bin/swagger" ]; then
@@ -48,11 +49,11 @@ if [ ! -f "$GOPATH/bin/swagger" ]; then
     go install github.com/go-swagger/go-swagger/cmd/swagger
 fi
 
-API_PATH="$SCRIPT_DIR/api"
-API_SWAGGER_PATH="$SCRIPT_DIR/api/swagger.yml"
-
 # 判断是否传入--gen-api参数，如果传入则重新生成api代码
 if [ $GEN_API -ne 0 ]; then
+	API_PATH="$SCRIPT_DIR/api"
+	API_SWAGGER_PATH="$SCRIPT_DIR/api/swagger.yml"
+
     echo "generate api code"
     rm -rf $API_PATH/gen
     mkdir -p $API_PATH/gen
@@ -76,7 +77,7 @@ fi
 cd $SCRIPT_DIR/website
 npm install
 npm run build
-cd $CALL_DIR
+cd $SCRIPT_DIR
 
 if [ -d "$OUTPUT_DIR/website" ]; then
     rm -rf $OUTPUT_DIR/website
