@@ -79,6 +79,11 @@ func (m *HistoryList) ContextValidate(ctx context.Context, formats strfmt.Regist
 func (m *HistoryList) contextValidateData(ctx context.Context, formats strfmt.Registry) error {
 
 	if m.Data != nil {
+
+		if swag.IsZero(m.Data) { // not required
+			return nil
+		}
+
 		if err := m.Data.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("data")
@@ -208,6 +213,11 @@ func (m *HistoryListData) contextValidateHistory(ctx context.Context, formats st
 	for i := 0; i < len(m.History); i++ {
 
 		if m.History[i] != nil {
+
+			if swag.IsZero(m.History[i]) { // not required
+				return nil
+			}
+
 			if err := m.History[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("data" + "." + "history" + "." + strconv.Itoa(i))
@@ -226,6 +236,11 @@ func (m *HistoryListData) contextValidateHistory(ctx context.Context, formats st
 func (m *HistoryListData) contextValidatePageInfo(ctx context.Context, formats strfmt.Registry) error {
 
 	if m.PageInfo != nil {
+
+		if swag.IsZero(m.PageInfo) { // not required
+			return nil
+		}
+
 		if err := m.PageInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("data" + "." + "page_info")

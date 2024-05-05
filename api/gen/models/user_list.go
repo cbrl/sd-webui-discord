@@ -79,6 +79,11 @@ func (m *UserList) ContextValidate(ctx context.Context, formats strfmt.Registry)
 func (m *UserList) contextValidateData(ctx context.Context, formats strfmt.Registry) error {
 
 	if m.Data != nil {
+
+		if swag.IsZero(m.Data) { // not required
+			return nil
+		}
+
 		if err := m.Data.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("data")
@@ -206,6 +211,11 @@ func (m *UserListData) ContextValidate(ctx context.Context, formats strfmt.Regis
 func (m *UserListData) contextValidatePageInfo(ctx context.Context, formats strfmt.Registry) error {
 
 	if m.PageInfo != nil {
+
+		if swag.IsZero(m.PageInfo) { // not required
+			return nil
+		}
+
 		if err := m.PageInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("data" + "." + "page_info")
@@ -224,6 +234,11 @@ func (m *UserListData) contextValidateUsers(ctx context.Context, formats strfmt.
 	for i := 0; i < len(m.Users); i++ {
 
 		if m.Users[i] != nil {
+
+			if swag.IsZero(m.Users[i]) { // not required
+				return nil
+			}
+
 			if err := m.Users[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("data" + "." + "users" + "." + strconv.Itoa(i))

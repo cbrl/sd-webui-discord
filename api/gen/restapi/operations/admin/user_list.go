@@ -163,6 +163,11 @@ func (o *UserListBody) ContextValidate(ctx context.Context, formats strfmt.Regis
 func (o *UserListBody) contextValidatePageInfo(ctx context.Context, formats strfmt.Registry) error {
 
 	if o.PageInfo != nil {
+
+		if swag.IsZero(o.PageInfo) { // not required
+			return nil
+		}
+
 		if err := o.PageInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("body" + "." + "page_info")
@@ -179,6 +184,11 @@ func (o *UserListBody) contextValidatePageInfo(ctx context.Context, formats strf
 func (o *UserListBody) contextValidateQuery(ctx context.Context, formats strfmt.Registry) error {
 
 	if o.Query != nil {
+
+		if swag.IsZero(o.Query) { // not required
+			return nil
+		}
+
 		if err := o.Query.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("body" + "." + "query")

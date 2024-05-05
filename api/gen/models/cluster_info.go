@@ -79,6 +79,11 @@ func (m *ClusterInfo) ContextValidate(ctx context.Context, formats strfmt.Regist
 func (m *ClusterInfo) contextValidateData(ctx context.Context, formats strfmt.Registry) error {
 
 	if m.Data != nil {
+
+		if swag.IsZero(m.Data) { // not required
+			return nil
+		}
+
 		if err := m.Data.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("data")
@@ -178,6 +183,11 @@ func (m *ClusterInfoData) contextValidateCluster(ctx context.Context, formats st
 	for i := 0; i < len(m.Cluster); i++ {
 
 		if m.Cluster[i] != nil {
+
+			if swag.IsZero(m.Cluster[i]) { // not required
+				return nil
+			}
+
 			if err := m.Cluster[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("data" + "." + "cluster" + "." + strconv.Itoa(i))
